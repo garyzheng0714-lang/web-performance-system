@@ -6,24 +6,20 @@ import {
   IsString,
   Max,
   Min,
+  IsEmail,
 } from 'class-validator';
 
 // 用户模块数据传输对象（DTO）
 
 // 更新用户信息请求
 export class UpdateUserDto {
-  // 用户ID
-  @IsString()
-  @IsNotEmpty()
-  userId: string;
-
   // 姓名
   @IsString()
   @IsOptional()
   name?: string;
 
   // 邮箱
-  @IsString()
+  @IsEmail()
   @IsOptional()
   email?: string;
 
@@ -104,7 +100,7 @@ export class CreateUserDto {
   name: string;
 
   // 邮箱
-  @IsString()
+  @IsEmail()
   @IsNotEmpty()
   email: string;
 

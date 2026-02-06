@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { BitableService } from '../feishu/bitable.service';
 import { MessageService } from '../feishu/message.service';
 import { UserService } from '../user/user.service';
+import { QueryObjectivesDto } from './dto';
+import { OperationLogService } from '../operation-log/operation-log.service';
 
 @Injectable()
 export class ObjectiveService {
@@ -12,7 +14,12 @@ export class ObjectiveService {
     private readonly bitableService: BitableService,
     private readonly userService: UserService,
     private readonly messageService: MessageService,
-  ) {}
+    private readonly operationLogService: OperationLogService,
+  ) {
+    if (!this.tableId) {
+      throw new Error('BITABLE_TABLE_OBJECTIVES 未配置');
+    }
+  }
 
   /**
    * 创建目标
@@ -23,8 +30,7 @@ export class ObjectiveService {
     this.logger.log(`创建目标: userId=${userId}`);
 
     // 验证用户是否存在
-    const userResult = await this.userService.getUserById(userId);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(userId);
 
     // 生成目标ID
     const objectiveId = `OBJ${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
@@ -54,13 +60,17 @@ export class ObjectiveService {
 
     this.logger.log(`目标创建成功: ${objectiveId}`);
 
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '创建',
+      resourceType: '目标',
+      resourceId: objectiveId,
+      newValue: fields,
+    });
+
     return {
-      success: true,
-      message: '目标创建成功',
-      data: {
-        objectiveId,
-        recordId: record.record_id,
-      },
+      objectiveId,
+      recordId: record.record_id,
     };
   }
 
@@ -76,7 +86,7 @@ export class ObjectiveService {
     // 查询目标
     const objectives = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[目标ID] = "${objectiveId}"`,
+      `CurrentValue.[目标ID] = "${this.escapeFilterValue(objectiveId)}"`,
     );
 
     if (objectives.length === 0) {
@@ -102,6 +112,8 @@ export class ObjectiveService {
 
     if (data.title !== undefined) updateFields['目标标题'] = data.title;
     if (data.description !== undefined) updateFields['目标描述'] = data.description;
+    if (data.periodId !== undefined) updateFields['周期ID'] = data.periodId;
+    if (data.periodName !== undefined) updateFields['周期名称'] = data.periodName;
     if (data.type !== undefined) updateFields['目标类型'] = data.type;
     if (data.weight !== undefined) updateFields['权重'] = data.weight;
     if (data.target !== undefined) updateFields['目标值'] = data.target;
@@ -117,13 +129,16 @@ export class ObjectiveService {
 
     this.logger.log(`目标更新成功: ${objectiveId}`);
 
-    return {
-      success: true,
-      message: '目标更新成功',
-      data: {
-        objectiveId,
-      },
-    };
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '更新',
+      resourceType: '目标',
+      resourceId: objectiveId,
+      oldValue: fields,
+      newValue: updateFields,
+    });
+
+    return { objectiveId };
   }
 
   /**
@@ -137,7 +152,7 @@ export class ObjectiveService {
     // 查询目标
     const objectives = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[目标ID] = "${objectiveId}"`,
+      `CurrentValue.[目标ID] = "${this.escapeFilterValue(objectiveId)}"`,
     );
 
     if (objectives.length === 0) {
@@ -161,13 +176,15 @@ export class ObjectiveService {
 
     this.logger.log(`目标删除成功: ${objectiveId}`);
 
-    return {
-      success: true,
-      message: '目标删除成功',
-      data: {
-        objectiveId,
-      },
-    };
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '删除',
+      resourceType: '目标',
+      resourceId: objectiveId,
+      oldValue: fields,
+    });
+
+    return { objectiveId };
   }
 
   /**
@@ -182,7 +199,7 @@ export class ObjectiveService {
     // 查询目标
     const objectives = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[目标ID] = "${objectiveId}"`,
+      `CurrentValue.[目标ID] = "${this.escapeFilterValue(objectiveId)}"`,
     );
 
     if (objectives.length === 0) {
@@ -214,15 +231,23 @@ export class ObjectiveService {
 
     this.logger.log(`目标提交成功: ${objectiveId}`);
 
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '提交',
+      resourceType: '目标',
+      resourceId: objectiveId,
+      oldValue: fields,
+      newValue: { status: '待审批' },
+    });
+
     // 发送审批通知给主管
-    const userResult = await this.userService.getUserById(userId);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(userId);
     if (user.supervisorId) {
       const periodLabel = fields['周期名称'] || fields['周期ID'] || '未指定周期';
       let objectiveCount = 1;
-      const filterParts = [`CurrentValue.[用户ID] = "${userId}"`];
+      const filterParts = [`CurrentValue.[用户ID] = "${this.escapeFilterValue(userId)}"`];
       if (fields['周期ID']) {
-        filterParts.push(`CurrentValue.[周期ID] = "${fields['周期ID']}"`);
+        filterParts.push(`CurrentValue.[周期ID] = "${this.escapeFilterValue(fields['周期ID'])}"`);
       }
       const relatedObjectives = await this.bitableService.findRecords(
         this.tableId,
@@ -240,12 +265,8 @@ export class ObjectiveService {
     }
 
     return {
-      success: true,
-      message: '目标提交成功，等待审批',
-      data: {
-        objectiveId,
-        status: '待审批',
-      },
+      objectiveId,
+      status: '待审批',
     };
   }
 
@@ -261,7 +282,7 @@ export class ObjectiveService {
     // 查询目标
     const objectives = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[目标ID] = "${objectiveId}"`,
+      `CurrentValue.[目标ID] = "${this.escapeFilterValue(objectiveId)}"`,
     );
 
     if (objectives.length === 0) {
@@ -272,8 +293,7 @@ export class ObjectiveService {
     const fields = objective.fields || {};
 
     // 检查权限（只有主管才能审批）
-    const userResult = await this.userService.getUserById(fields['用户ID']);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(fields['用户ID']);
     if (user.supervisorId !== approverId) {
       throw new ForbiddenException('无权审批此目标');
     }
@@ -283,8 +303,7 @@ export class ObjectiveService {
     }
 
     // 获取审批人信息
-    const approverResult = await this.userService.getUserById(approverId);
-    const approver = approverResult.data;
+    const approver = await this.userService.getUserById(approverId);
 
     // 更新状态
     const updateFields: any = {
@@ -304,6 +323,15 @@ export class ObjectiveService {
 
     this.logger.log(`目标审批完成: ${objectiveId}, 结果: ${data.approved ? '已批准' : '已拒绝'}`);
 
+    await this.operationLogService.logOperation({
+      userId: approverId,
+      operationType: data.approved ? '审批通过' : '审批拒绝',
+      resourceType: '目标',
+      resourceId: objectiveId,
+      oldValue: fields,
+      newValue: updateFields,
+    });
+
     // 发送通知给员工
     const periodLabel = fields['周期名称'] || fields['周期ID'] || '未指定周期';
     await this.messageService.sendApprovalResultNotification(
@@ -314,12 +342,8 @@ export class ObjectiveService {
     );
 
     return {
-      success: true,
-      message: data.approved ? '目标已批准' : '目标已拒绝',
-      data: {
-        objectiveId,
-        status: data.approved ? '已批准' : '已拒绝',
-      },
+      objectiveId,
+      status: data.approved ? '已批准' : '已拒绝',
     };
   }
 
@@ -328,24 +352,37 @@ export class ObjectiveService {
    * @param userId 用户ID
    * @param status 状态筛选
    */
-  async getUserObjectives(userId: string, status?: string) {
+  async getUserObjectives(userId: string, query: QueryObjectivesDto = {}) {
+    const { status, periodId, type, keyword, page = 1, pageSize = 50 } = query;
     this.logger.log(`获取用户目标列表: userId=${userId}, status=${status}`);
 
-    let filter = `CurrentValue.[用户ID] = "${userId}"`;
-    if (status) {
-      filter += ` AND CurrentValue.[状态] = "${status}"`;
-    }
+    const filters: string[] = [`CurrentValue.[用户ID] = "${this.escapeFilterValue(userId)}"`];
+    if (status) filters.push(`CurrentValue.[状态] = "${this.escapeFilterValue(status)}"`);
+    if (periodId) filters.push(`CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`);
+    if (type) filters.push(`CurrentValue.[目标类型] = "${this.escapeFilterValue(type)}"`);
 
+    const filter = filters.join(' AND ');
     const objectives = await this.bitableService.findRecords(this.tableId, filter);
 
-    const list = objectives.map((record) => this.formatObjective(record));
+    let list = objectives.map((record) => this.formatObjective(record));
+    if (keyword) {
+      const kw = keyword.trim().toLowerCase();
+      list = list.filter((item) =>
+        item.title.toLowerCase().includes(kw) ||
+        item.description.toLowerCase().includes(kw),
+      );
+    }
+
+    const total = list.length;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paged = list.slice(startIndex, endIndex);
 
     return {
-      success: true,
-      data: {
-        total: list.length,
-        list,
-      },
+      total,
+      page,
+      pageSize,
+      list: paged,
     };
   }
 
@@ -358,7 +395,7 @@ export class ObjectiveService {
 
     const objectives = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[目标ID] = "${objectiveId}"`,
+      `CurrentValue.[目标ID] = "${this.escapeFilterValue(objectiveId)}"`,
     );
 
     if (objectives.length === 0) {
@@ -367,10 +404,7 @@ export class ObjectiveService {
 
     const objective = this.formatObjective(objectives[0]);
 
-    return {
-      success: true,
-      data: objective,
-    };
+    return objective;
   }
 
   /**
@@ -390,16 +424,13 @@ export class ObjectiveService {
 
     // 查询所有待审批目标并按主管过滤
     const subordinatesResult = await this.userService.getSubordinates(supervisorId);
-    const subordinates = subordinatesResult.data.list || [];
+    const subordinates = subordinatesResult.list || [];
     const subordinateIds = new Set(subordinates.map((item: any) => item.userId));
 
     if (subordinateIds.size === 0) {
       return {
-        success: true,
-        data: {
-          total: 0,
-          list: [],
-        },
+        total: 0,
+        list: [],
       };
     }
 
@@ -413,11 +444,8 @@ export class ObjectiveService {
       .map((record) => this.formatObjective(record));
 
     return {
-      success: true,
-      data: {
-        total: list.length,
-        list,
-      },
+      total: list.length,
+      list,
     };
   }
 
@@ -449,5 +477,9 @@ export class ObjectiveService {
       createdAt: fields['创建时间'] || '',
       updatedAt: fields['更新时间'] || '',
     };
+  }
+
+  private escapeFilterValue(value: string) {
+    return value.replace(/"/g, '\\"');
   }
 }

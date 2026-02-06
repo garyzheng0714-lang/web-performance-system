@@ -113,3 +113,31 @@ export class ScoreCompletionDto {
   @IsOptional()
   supervisorComment?: string;
 }
+
+// 查询完成情况列表请求
+export class QueryCompletionsDto {
+  // 页码
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
+  // 每页数量
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(200)
+  @IsOptional()
+  pageSize?: number;
+
+  // 状态筛选
+  @IsString()
+  @IsOptional()
+  status?: string;
+
+  // 周期ID筛选
+  @IsString()
+  @IsOptional()
+  periodId?: string;
+}

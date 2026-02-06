@@ -6,6 +6,8 @@ import { UserModule } from './modules/user/user.module';
 import { ObjectiveModule } from './modules/objective/objective.module';
 import { CompletionModule } from './modules/completion/completion.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { HealthModule } from './modules/health/health.module';
+import { OperationLogModule } from './modules/operation-log/operation-log.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { AdminModule } from './modules/admin/admin.module';
     ObjectiveModule,
     CompletionModule,
     AdminModule,
+    HealthModule,
+    OperationLogModule,
   ],
 })
 export class AppModule {}

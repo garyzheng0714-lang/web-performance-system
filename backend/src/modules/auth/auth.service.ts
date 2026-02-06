@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { FeishuService } from '../feishu/feishu.service';
 import { BitableService } from '../feishu/bitable.service';
 import { JwtPayload } from '../../types';
@@ -7,24 +8,33 @@ import { JwtPayload } from '../../types';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly redirectUri = process.env.FEISHU_REDIRECT_URI;
-  private readonly appId = process.env.FEISHU_APP_ID;
-  private readonly employeesTableId = process.env.BITABLE_TABLE_EMPLOYEES;
+  private redirectUri: string;
+  private appId: string;
+  private employeesTableId: string;
 
   constructor(
     private readonly feishuService: FeishuService,
     private readonly bitableService: BitableService,
     private readonly jwtService: JwtService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.redirectUri = this.configService.get('FEISHU_REDIRECT_URI') || '';
+    this.appId = this.configService.get('FEISHU_APP_ID') || '';
+    this.employeesTableId = this.configService.get('BITABLE_TABLE_EMPLOYEES') || '';
+  }
 
   /**
    * 获取飞书授权URL
    */
-  getAuthUrl(): string {
+  getAuthUrl(state: string): string {
+    if (!this.appId || !this.redirectUri) {
+      throw new Error('飞书应用配置不完整，请检查 FEISHU_APP_ID 与 FEISHU_REDIRECT_URI');
+    }
     const params = new URLSearchParams({
       app_id: this.appId,
       redirect_uri: this.redirectUri,
-      state: 'STATE',
+      scope: this.configService.get('FEISHU_OAUTH_SCOPE') || 'contact:user.base',
+      state,
     });
 
     return `https://open.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`;
@@ -35,20 +45,28 @@ export class AuthService {
    */
   async login(code: string): Promise<{ token: string; user: any }> {
     try {
-      // 1. 获取用户访问令牌
-      const accessToken = await this.feishuService.getUserAccessToken(code);
+      if (!this.employeesTableId) {
+        throw new UnauthorizedException('员工信息表未配置');
+      }
+      // 1. 使用授权码换取用户信息
+      const { user: feishuUser } = await this.feishuService.exchangeCodeForUser(code);
 
-      // 2. 获取用户信息
-      const feishuUser = await this.feishuService.getUserInfo(accessToken);
-      const userId = feishuUser.user_id;
+      const userId = feishuUser?.user_id || feishuUser?.open_id;
+      if (!userId) {
+        throw new UnauthorizedException('获取飞书用户信息失败');
+      }
 
       // 3. 从多维表格查询用户信息
+      this.logger.log(`[登录] 查询用户: ${userId}`);
       const records = await this.bitableService.findRecords(
         this.employeesTableId,
-        `CurrentValue.[用户ID] = "${userId}"`,
+        `CurrentValue.[用户ID] = "${this.escapeFilterValue(userId)}"`,
       );
 
+      this.logger.log(`[登录] 查询结果: 找到 ${records?.length || 0} 条记录`);
+
       if (!records || records.length === 0) {
+        this.logger.error(`[登录] 用户不存在: ${userId}`);
         throw new UnauthorizedException('用户不存在，请联系管理员添加');
       }
 
@@ -85,7 +103,7 @@ export class AuthService {
   async getProfile(userId: string): Promise<any> {
     const records = await this.bitableService.findRecords(
       this.employeesTableId,
-      `CurrentValue.[用户ID] = "${userId}"`,
+      `CurrentValue.[用户ID] = "${this.escapeFilterValue(userId)}"`,
     );
 
     if (!records || records.length === 0) {
@@ -123,10 +141,14 @@ export class AuthService {
       department: fields['部门'] || '',
       position: fields['职位'] || '',
       supervisorId: fields['主管ID'] || '',
-      role: fields['角色'] || '',
+      role: fields['角色'] || '员工',
       status: fields['状态'] || '',
       entryDate: fields['入职日期'] || '',
       createdAt: fields['创建时间'] || '',
     };
+  }
+
+  private escapeFilterValue(value: string) {
+    return value.replace(/"/g, '\\"');
   }
 }

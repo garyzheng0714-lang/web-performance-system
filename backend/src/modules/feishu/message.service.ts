@@ -1,12 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FeishuService } from './feishu.service';
 
 @Injectable()
 export class MessageService {
   private readonly logger = new Logger(MessageService.name);
-  private readonly frontendUrl = process.env.FRONTEND_URL;
+  private readonly frontendUrl: string;
 
-  constructor(private readonly feishuService: FeishuService) {}
+  constructor(
+    private readonly feishuService: FeishuService,
+    private readonly configService: ConfigService,
+  ) {
+    this.frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+  }
 
   /**
    * 发送文本消息
@@ -94,7 +100,7 @@ export class MessageService {
                 content: '立即审批',
                 tag: 'plain_text',
               },
-              url: `${this.frontendUrl}/approve/${objectiveId}`,
+              url: `${this.frontendUrl}/approvals?objectiveId=${objectiveId}`,
               type: 'primary',
             },
           ],
@@ -189,7 +195,7 @@ export class MessageService {
                 content: '立即填写',
                 tag: 'plain_text',
               },
-              url: `${this.frontendUrl}/completions/create`,
+              url: `${this.frontendUrl}/completions?create=1`,
               type: 'primary',
             },
           ],
@@ -236,7 +242,7 @@ export class MessageService {
                 content: '立即评分',
                 tag: 'plain_text',
               },
-              url: `${this.frontendUrl}/completions/score`,
+              url: `${this.frontendUrl}/scoring`,
               type: 'primary',
             },
           ],
@@ -331,7 +337,7 @@ export class MessageService {
                 content: '处理申请',
                 tag: 'plain_text',
               },
-              url: `${this.frontendUrl}/admin/unlock-requests`,
+              url: `${this.frontendUrl}/admin`,
               type: 'primary',
             },
           ],

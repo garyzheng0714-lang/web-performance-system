@@ -40,13 +40,10 @@ export class AdminService {
     });
 
     return {
-      success: true,
-      data: {
-        totalEmployees,
-        totalObjectives,
-        statusCount,
-        periodId: periodId || 'all',
-      },
+      totalEmployees,
+      totalObjectives,
+      statusCount,
+      periodId: periodId || 'all',
     };
   }
 
@@ -62,7 +59,7 @@ export class AdminService {
     const employeesTableId = process.env.BITABLE_TABLE_EMPLOYEES;
     let employeeFilter = '';
     if (department) {
-      employeeFilter = `CurrentValue.[部门] = "${department}"`;
+      employeeFilter = `CurrentValue.[部门] = "${this.escapeFilterValue(department)}"`;
     }
     const employees = await this.bitableService.findRecords(
       employeesTableId,
@@ -80,7 +77,7 @@ export class AdminService {
     const objectivesTableId = process.env.BITABLE_TABLE_OBJECTIVES;
     let objectiveFilter = '';
     if (periodId) {
-      objectiveFilter = `CurrentValue.[周期ID] = "${periodId}"`;
+      objectiveFilter = `CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`;
     }
     const objectives = await this.bitableService.findRecords(
       objectivesTableId,
@@ -101,17 +98,14 @@ export class AdminService {
     });
 
     return {
-      success: true,
-      data: {
-        totalEmployees: employees.length,
-        departmentStats,
-        totalObjectives: objectives.length,
-        submittedCount,
-        approvedCount,
-        completionRate: objectives.length > 0 ? Math.round((approvedCount / objectives.length) * 100) : 0,
-        periodId: periodId || 'all',
-        department: department || 'all',
-      },
+      totalEmployees: employees.length,
+      departmentStats,
+      totalObjectives: objectives.length,
+      submittedCount,
+      approvedCount,
+      completionRate: objectives.length > 0 ? Math.round((approvedCount / objectives.length) * 100) : 0,
+      periodId: periodId || 'all',
+      department: department || 'all',
     };
   }
 
@@ -132,7 +126,7 @@ export class AdminService {
     const objectivesTableId = process.env.BITABLE_TABLE_OBJECTIVES;
     let objectiveFilter = '';
     if (periodId) {
-      objectiveFilter = `CurrentValue.[周期ID] = "${periodId}"`;
+      objectiveFilter = `CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`;
     }
     const objectives = await this.bitableService.findRecords(
       objectivesTableId,
@@ -172,14 +166,11 @@ export class AdminService {
     const paginatedStats = employeeStats.slice(startIndex, endIndex);
 
     return {
-      success: true,
-      data: {
-        total,
-        page,
-        pageSize,
-        list: paginatedStats,
-        periodId: periodId || 'all',
-      },
+      total,
+      page,
+      pageSize,
+      list: paginatedStats,
+      periodId: periodId || 'all',
     };
   }
 
@@ -219,7 +210,7 @@ export class AdminService {
     const objectivesTableId = process.env.BITABLE_TABLE_OBJECTIVES;
     let objectiveFilter = '';
     if (periodId) {
-      objectiveFilter = `CurrentValue.[周期ID] = "${periodId}"`;
+      objectiveFilter = `CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`;
     }
     const objectives = await this.bitableService.findRecords(
       objectivesTableId,
@@ -253,13 +244,10 @@ export class AdminService {
     });
 
     return {
-      success: true,
-      data: {
-        totalDepartments: departmentList.length,
-        totalEmployees: employees.length,
-        list: departmentList,
-        periodId: periodId || 'all',
-      },
+      totalDepartments: departmentList.length,
+      totalEmployees: employees.length,
+      list: departmentList,
+      periodId: periodId || 'all',
     };
   }
 
@@ -276,7 +264,7 @@ export class AdminService {
     const employeesTableId = process.env.BITABLE_TABLE_EMPLOYEES;
     let employeeFilter = '';
     if (department) {
-      employeeFilter = `CurrentValue.[部门] = "${department}"`;
+      employeeFilter = `CurrentValue.[部门] = "${this.escapeFilterValue(department)}"`;
     }
     const employees = await this.bitableService.findRecords(
       employeesTableId,
@@ -287,7 +275,7 @@ export class AdminService {
     const objectivesTableId = process.env.BITABLE_TABLE_OBJECTIVES;
     let objectiveFilter = '';
     if (periodId) {
-      objectiveFilter = `CurrentValue.[周期ID] = "${periodId}"`;
+      objectiveFilter = `CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`;
     }
     const objectives = await this.bitableService.findRecords(
       objectivesTableId,
@@ -320,14 +308,10 @@ export class AdminService {
     // TODO: 根据 format 生成文件（excel/csv/json）
 
     return {
-      success: true,
-      message: '数据导出成功',
-      data: {
-        format,
-        totalRecords: exportData.length,
-        data: exportData,
-        // TODO: 返回文件下载链接
-      },
+      format,
+      totalRecords: exportData.length,
+      data: exportData,
+      // TODO: 返回文件下载链接
     };
   }
 
@@ -356,16 +340,16 @@ export class AdminService {
     const conditions: string[] = [];
 
     if (filters?.userId) {
-      conditions.push(`CurrentValue.[用户ID] = "${filters.userId}"`);
+      conditions.push(`CurrentValue.[用户ID] = "${this.escapeFilterValue(filters.userId)}"`);
     }
     if (filters?.operation) {
-      conditions.push(`CurrentValue.[操作类型] = "${filters.operation}"`);
+      conditions.push(`CurrentValue.[操作类型] = "${this.escapeFilterValue(filters.operation)}"`);
     }
     if (filters?.startDate) {
-      conditions.push(`CurrentValue.[操作时间] >= "${filters.startDate}"`);
+      conditions.push(`CurrentValue.[操作时间] >= "${this.escapeFilterValue(filters.startDate)}"`);
     }
     if (filters?.endDate) {
-      conditions.push(`CurrentValue.[操作时间] <= "${filters.endDate}"`);
+      conditions.push(`CurrentValue.[操作时间] <= "${this.escapeFilterValue(filters.endDate)}"`);
     }
 
     if (conditions.length > 0) {
@@ -376,7 +360,6 @@ export class AdminService {
     const logs = await this.bitableService.findRecords(
       logsTableId,
       filter || undefined,
-      pageSize,
     );
 
     // 格式化日志数据
@@ -393,14 +376,20 @@ export class AdminService {
       operationTime: log.fields?.['操作时间'],
     }));
 
+    const total = formattedLogs.length;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const pagedLogs = formattedLogs.slice(startIndex, endIndex);
+
     return {
-      success: true,
-      data: {
-        total: formattedLogs.length,
-        page,
-        pageSize,
-        list: formattedLogs,
-      },
+      total,
+      page,
+      pageSize,
+      list: pagedLogs,
     };
+  }
+
+  private escapeFilterValue(value: string) {
+    return value.replace(/"/g, '\\"');
   }
 }

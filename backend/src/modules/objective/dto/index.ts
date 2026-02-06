@@ -82,6 +82,16 @@ export class UpdateObjectiveDto {
   @IsOptional()
   description?: string;
 
+  // 周期ID
+  @IsString()
+  @IsOptional()
+  periodId?: string;
+
+  // 周期名称
+  @IsString()
+  @IsOptional()
+  periodName?: string;
+
   // 目标类型
   @IsString()
   @IsOptional()

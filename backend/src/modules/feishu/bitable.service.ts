@@ -2,34 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { FeishuService } from './feishu.service';
 import { BitableRecord } from '../../types';
 
-type BitableFilter = {
-  conjunction: 'and' | 'or';
-  conditions?: {
-    field_name: string;
-    operator:
-      | 'is'
-      | 'isNot'
-      | 'contains'
-      | 'doesNotContain'
-      | 'isEmpty'
-      | 'isNotEmpty'
-      | 'isGreater'
-      | 'isGreaterEqual'
-      | 'isLess'
-      | 'isLessEqual'
-      | 'like'
-      | 'in';
-    value?: string[];
-  }[];
-  children?: BitableFilter[];
-};
-
 @Injectable()
 export class BitableService {
   private readonly logger = new Logger(BitableService.name);
   private readonly baseToken = process.env.BITABLE_APP_TOKEN;
 
-  constructor(private readonly feishuService: FeishuService) {}
+  constructor(private readonly feishuService: FeishuService) {
+    if (!this.baseToken) {
+      throw new Error('BITABLE_APP_TOKEN 未配置');
+    }
+  }
 
   /**
    * 查询记录
@@ -67,6 +49,7 @@ export class BitableService {
           },
           params,
         });
+        this.ensureSuccess(res, '查询记录');
 
         if (res.data?.items) {
           allRecords = allRecords.concat(res.data.items as BitableRecord[]);
@@ -99,6 +82,7 @@ export class BitableService {
           record_id: recordId,
         },
       });
+      this.ensureSuccess(res, '获取记录');
 
       return res.data?.record as BitableRecord;
     } catch (error) {
@@ -125,6 +109,7 @@ export class BitableService {
           fields,
         },
       });
+      this.ensureSuccess(res, '创建记录');
 
       return res.data?.record as BitableRecord;
     } catch (error) {
@@ -151,6 +136,7 @@ export class BitableService {
           records,
         },
       });
+      this.ensureSuccess(res, '批量创建记录');
 
       return (res.data?.records as BitableRecord[]) || [];
     } catch (error) {
@@ -179,6 +165,7 @@ export class BitableService {
           fields,
         },
       });
+      this.ensureSuccess(res, '更新记录');
 
       return res.data?.record as BitableRecord;
     } catch (error) {
@@ -205,6 +192,7 @@ export class BitableService {
           records,
         },
       });
+      this.ensureSuccess(res, '批量更新记录');
 
       return (res.data?.records as BitableRecord[]) || [];
     } catch (error) {
@@ -219,13 +207,14 @@ export class BitableService {
   async deleteRecord(tableId: string, recordId: string): Promise<void> {
     try {
       const client = this.feishuService.getClient();
-      await client.bitable.appTableRecord.delete({
+      const res = await client.bitable.appTableRecord.delete({
         path: {
           app_token: this.baseToken,
           table_id: tableId,
           record_id: recordId,
         },
       });
+      this.ensureSuccess(res, '删除记录');
     } catch (error) {
       this.logger.error(`删除记录失败: ${recordId}`, error);
       throw error;
@@ -241,7 +230,7 @@ export class BitableService {
   ): Promise<void> {
     try {
       const client = this.feishuService.getClient();
-      await client.bitable.appTableRecord.batchDelete({
+      const res = await client.bitable.appTableRecord.batchDelete({
         path: {
           app_token: this.baseToken,
           table_id: tableId,
@@ -250,6 +239,7 @@ export class BitableService {
           records: recordIds,
         },
       });
+      this.ensureSuccess(res, '批量删除记录');
     } catch (error) {
       this.logger.error('批量删除记录失败', error);
       throw error;
@@ -261,7 +251,7 @@ export class BitableService {
    */
   async searchRecords(
     tableId: string,
-    filter: BitableFilter,
+    filter: any,
   ): Promise<BitableRecord[]> {
     try {
       const client = this.feishuService.getClient();
@@ -271,14 +261,22 @@ export class BitableService {
           table_id: tableId,
         },
         data: {
-          filter,
+          filter: filter as any,
         },
       });
+      this.ensureSuccess(res, '搜索记录');
 
       return (res.data?.items as BitableRecord[]) || [];
     } catch (error) {
       this.logger.error('搜索记录失败', error);
       throw error;
+    }
+  }
+
+  private ensureSuccess(res: any, action: string) {
+    if (res?.code && res.code !== 0) {
+      this.logger.error(`${action}失败: ${res.msg || 'unknown error'}`);
+      throw new Error(`${action}失败: ${res.msg || 'unknown error'}`);
     }
   }
 }

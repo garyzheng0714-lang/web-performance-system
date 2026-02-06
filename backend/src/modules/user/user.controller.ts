@@ -15,10 +15,14 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthGuard } from '@nestjs/passport';
+import { CreateUserDto, UpdateUserDto } from './dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserRole } from '../../types';
 
 @ApiTags('用户管理')
 @Controller('users')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiBearerAuth()
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -66,6 +70,7 @@ export class UserController {
    */
   @Get()
   @ApiOperation({ summary: '获取所有员工列表' })
+  @Roles(UserRole.ADMIN)
   @ApiQuery({ name: 'page', required: false, description: '页码' })
   @ApiQuery({ name: 'pageSize', required: false, description: '每页数量' })
   async getAllUsers(
@@ -91,5 +96,39 @@ export class UserController {
   @ApiOperation({ summary: '获取用户的历史考核记录' })
   async getUserHistory(@Param('userId') userId: string) {
     return this.userService.getUserHistory(userId);
+  }
+
+  /**
+   * 创建用户（管理员）
+   */
+  @Post()
+  @ApiOperation({ summary: '创建用户' })
+  @Roles(UserRole.ADMIN)
+  async createUser(@Request() req, @Body() data: CreateUserDto) {
+    return this.userService.createUser(data, req.user.user_id);
+  }
+
+  /**
+   * 更新用户（管理员）
+   */
+  @Put(':userId')
+  @ApiOperation({ summary: '更新用户' })
+  @Roles(UserRole.ADMIN)
+  async updateUser(
+    @Request() req,
+    @Param('userId') userId: string,
+    @Body() data: UpdateUserDto,
+  ) {
+    return this.userService.updateUser(userId, data, req.user.user_id);
+  }
+
+  /**
+   * 删除用户（管理员）
+   */
+  @Delete(':userId')
+  @ApiOperation({ summary: '删除用户' })
+  @Roles(UserRole.ADMIN)
+  async deleteUser(@Request() req, @Param('userId') userId: string) {
+    return this.userService.deleteUser(userId, req.user.user_id);
   }
 }

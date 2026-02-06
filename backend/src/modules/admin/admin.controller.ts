@@ -1,24 +1,21 @@
 import {
   Controller,
   Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
   Query,
   UseGuards,
-  Request,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { AuthGuard } from '@nestjs/passport';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserRole } from '../../types';
 
 @ApiTags('管理员功能')
 @Controller('admin')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiBearerAuth()
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
@@ -28,17 +25,10 @@ export class AdminController {
    */
   @Get('statistics')
   @ApiOperation({ summary: '获取系统统计数据' })
+  @Roles(UserRole.ADMIN)
   async getStatistics(
-    @Request() req,
     @Query('periodId') periodId?: string,
   ) {
-    // 检查是否为管理员
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.getStatistics(periodId);
   }
 
@@ -47,17 +37,11 @@ export class AdminController {
    */
   @Get('progress')
   @ApiOperation({ summary: '获取考核进度统计' })
+  @Roles(UserRole.ADMIN)
   async getProgress(
-    @Request() req,
     @Query('periodId') periodId?: string,
     @Query('department') department?: string,
   ) {
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.getProgress(periodId, department);
   }
 
@@ -66,18 +50,12 @@ export class AdminController {
    */
   @Get('employee-stats')
   @ApiOperation({ summary: '获取员工考核统计' })
+  @Roles(UserRole.ADMIN)
   async getEmployeeStats(
-    @Request() req,
     @Query('periodId') periodId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize?: number,
   ) {
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.getEmployeeStats(periodId, page, pageSize);
   }
 
@@ -86,16 +64,10 @@ export class AdminController {
    */
   @Get('department-stats')
   @ApiOperation({ summary: '获取部门考核统计' })
+  @Roles(UserRole.ADMIN)
   async getDepartmentStats(
-    @Request() req,
     @Query('periodId') periodId?: string,
   ) {
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.getDepartmentStats(periodId);
   }
 
@@ -104,18 +76,12 @@ export class AdminController {
    */
   @Get('export')
   @ApiOperation({ summary: '导出考核数据' })
+  @Roles(UserRole.ADMIN)
   async exportData(
-    @Request() req,
     @Query('periodId') periodId?: string,
     @Query('department') department?: string,
     @Query('format') format: string = 'excel',
   ) {
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.exportData(periodId, department, format);
   }
 
@@ -124,8 +90,8 @@ export class AdminController {
    */
   @Get('logs')
   @ApiOperation({ summary: '获取系统操作日志' })
+  @Roles(UserRole.ADMIN)
   async getSystemLogs(
-    @Request() req,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('pageSize', new DefaultValuePipe(50), ParseIntPipe) pageSize?: number,
     @Query('userId') userId?: string,
@@ -133,12 +99,6 @@ export class AdminController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
-    if (req.user.role !== '管理员') {
-      return {
-        success: false,
-        message: '无权限访问此接口',
-      };
-    }
     return this.adminService.getSystemLogs(page, pageSize, {
       userId,
       operation,

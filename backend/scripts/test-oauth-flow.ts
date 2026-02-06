@@ -39,7 +39,7 @@ async function testOAuthFlow() {
     console.log('步骤1: 使用code换取access_token...');
     console.log(`Code: ${testCode.substring(0, 20)}...`);
 
-    const tokenRes = await client.authen.oidcAccessToken.create({
+    const tokenRes = await client.authen.accessToken.create({
       data: {
         grant_type: 'authorization_code',
         code: testCode,
@@ -64,32 +64,11 @@ async function testOAuthFlow() {
     console.log(`✅ 成功获取access_token: ${accessToken.substring(0, 20)}...`);
     console.log(`Token类型: ${tokenRes.data?.token_type}`);
     console.log(`过期时间: ${tokenRes.data?.expires_in}秒`);
-
-    console.log('\n步骤2: 使用access_token获取用户信息...');
-
-    const userRes = await client.authen.userInfo.get(
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-    );
-
-    console.log(`\n响应码: ${userRes.code}`);
-    console.log(`响应消息: ${userRes.msg || 'success'}`);
-
-    if (userRes.code !== 0) {
-      console.error('❌ 获取用户信息失败!');
-      console.error('完整响应:', JSON.stringify(userRes, null, 2));
-      return;
-    }
-
-    console.log('\n✅ 成功获取用户信息:');
-    console.log(`User ID: ${userRes.data?.user_id}`);
-    console.log(`Name: ${userRes.data?.name}`);
-    console.log(`Email: ${userRes.data?.email}`);
-    console.log(`Avatar: ${userRes.data?.avatar_url ? '有' : '无'}`);
+    console.log('\n✅ 获取到的用户信息（来自access_token响应）:');
+    console.log(`User ID: ${tokenRes.data?.user_id}`);
+    console.log(`Name: ${tokenRes.data?.name}`);
+    console.log(`Email: ${tokenRes.data?.email}`);
+    console.log(`Avatar: ${tokenRes.data?.avatar_url ? '有' : '无'}`);
 
     console.log('\n🎉 OAuth流程测试成功!');
 

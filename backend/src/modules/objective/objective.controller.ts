@@ -13,7 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
 import { AuthGuard } from '@nestjs/passport';
-import { CreateObjectiveDto, UpdateObjectiveDto, SubmitObjectiveDto, ApproveObjectiveDto } from './dto';
+import { CreateObjectiveDto, UpdateObjectiveDto, SubmitObjectiveDto, ApproveObjectiveDto, QueryObjectivesDto } from './dto';
 
 @ApiTags('目标管理')
 @Controller('objectives')
@@ -97,10 +97,10 @@ export class ObjectiveController {
   @ApiOperation({ summary: '获取我的目标列表' })
   async getMyObjectives(
     @Request() req,
-    @Query('status') status?: string,
+    @Query() query: QueryObjectivesDto,
   ) {
     const userId = req.user.user_id;
-    return this.objectiveService.getUserObjectives(userId, status);
+    return this.objectiveService.getUserObjectives(userId, query);
   }
 
   /**
@@ -122,31 +122,28 @@ export class ObjectiveController {
   async getSubordinateObjectives(
     @Request() req,
     @Query('userId') userId?: string,
-    @Query('status') status?: string,
+    @Query() query?: QueryObjectivesDto,
   ) {
     const supervisorId = req.user.user_id;
 
     // 如果指定了userId，查询该用户的目标；否则查询所有下属的目标
     if (userId) {
-      return this.objectiveService.getUserObjectives(userId, status);
+      return this.objectiveService.getUserObjectives(userId, query || {});
     } else {
       // 获取所有下属
       const subordinatesResult = await this.objectiveService.getSubordinates(supervisorId);
-      const subordinates = subordinatesResult.data.list;
+      const subordinates = subordinatesResult.list || [];
 
       // 获取所有下属的目标
       const allObjectives = [];
       for (const subordinate of subordinates) {
-        const objectivesResult = await this.objectiveService.getUserObjectives(subordinate.userId, status);
-        allObjectives.push(...objectivesResult.data.list);
+        const objectivesResult = await this.objectiveService.getUserObjectives(subordinate.userId, query || {});
+        allObjectives.push(...objectivesResult.list);
       }
 
       return {
-        success: true,
-        data: {
-          total: allObjectives.length,
-          list: allObjectives,
-        },
+        total: allObjectives.length,
+        list: allObjectives,
       };
     }
   }

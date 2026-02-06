@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -12,7 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CompletionService } from './completion.service';
 import { AuthGuard } from '@nestjs/passport';
-import { CreateCompletionDto, UpdateCompletionDto, SubmitCompletionDto, ScoreCompletionDto } from './dto';
+import { CreateCompletionDto, UpdateCompletionDto, ScoreCompletionDto, QueryCompletionsDto } from './dto';
 
 @ApiTags('完成情况管理')
 @Controller('completions')
@@ -82,10 +83,10 @@ export class CompletionController {
   @ApiOperation({ summary: '获取我的完成情况列表' })
   async getMyCompletions(
     @Request() req,
-    @Query('status') status?: string,
+    @Query() query: QueryCompletionsDto,
   ) {
     const userId = req.user.user_id;
-    return this.completionService.getUserCompletions(userId, status);
+    return this.completionService.getUserCompletions(userId, query);
   }
 
   /**
@@ -115,8 +116,22 @@ export class CompletionController {
   @Post(':completionId/archive')
   @ApiOperation({ summary: '归档完成情况' })
   async archiveCompletion(
+    @Request() req,
     @Param('completionId') completionId: string,
   ) {
-    return this.completionService.archiveCompletion(completionId);
+    return this.completionService.archiveCompletion(completionId, req.user.user_id);
+  }
+
+  /**
+   * 删除完成情况（仅草稿）
+   */
+  @Delete(':completionId')
+  @ApiOperation({ summary: '删除完成情况' })
+  async deleteCompletion(
+    @Request() req,
+    @Param('completionId') completionId: string,
+  ) {
+    const userId = req.user.user_id;
+    return this.completionService.deleteCompletion(userId, completionId);
   }
 }

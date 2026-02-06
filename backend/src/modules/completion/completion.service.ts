@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { BitableService } from '../feishu/bitable.service';
 import { MessageService } from '../feishu/message.service';
 import { UserService } from '../user/user.service';
+import { QueryCompletionsDto } from './dto';
+import { OperationLogService } from '../operation-log/operation-log.service';
 
 @Injectable()
 export class CompletionService {
@@ -12,7 +14,12 @@ export class CompletionService {
     private readonly bitableService: BitableService,
     private readonly userService: UserService,
     private readonly messageService: MessageService,
-  ) {}
+    private readonly operationLogService: OperationLogService,
+  ) {
+    if (!this.tableId) {
+      throw new Error('BITABLE_TABLE_COMPLETIONS 未配置');
+    }
+  }
 
   /**
    * 创建完成情况记录
@@ -23,8 +30,26 @@ export class CompletionService {
     this.logger.log(`创建完成情况: userId=${userId}`);
 
     // 验证用户是否存在
-    const userResult = await this.userService.getUserById(userId);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(userId);
+
+    // 校验目标是否存在且归属当前用户
+    const objectivesTableId = process.env.BITABLE_TABLE_OBJECTIVES;
+    if (objectivesTableId) {
+      const objectives = await this.bitableService.findRecords(
+        objectivesTableId,
+        `CurrentValue.[目标ID] = "${this.escapeFilterValue(data.objectiveId)}"`,
+      );
+      if (objectives.length === 0) {
+        throw new NotFoundException('关联目标不存在');
+      }
+      const objectiveFields = objectives[0].fields || {};
+      if (objectiveFields['用户ID'] && objectiveFields['用户ID'] !== userId) {
+        throw new ForbiddenException('无权为该目标创建完成情况');
+      }
+      // 自动补全周期信息
+      data.periodId = data.periodId || objectiveFields['周期ID'] || '';
+      data.periodName = data.periodName || objectiveFields['周期名称'] || '';
+    }
 
     // 生成完成ID
     const completionId = `COMP${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
@@ -51,13 +76,17 @@ export class CompletionService {
 
     this.logger.log(`完成情况创建成功: ${completionId}`);
 
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '创建',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      newValue: fields,
+    });
+
     return {
-      success: true,
-      message: '完成情况创建成功',
-      data: {
-        completionId,
-        recordId: record.record_id,
-      },
+      completionId,
+      recordId: record.record_id,
     };
   }
 
@@ -73,7 +102,7 @@ export class CompletionService {
     // 查询完成情况
     const completions = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[完成ID] = "${completionId}"`,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
     );
 
     if (completions.length === 0) {
@@ -111,13 +140,16 @@ export class CompletionService {
 
     this.logger.log(`完成情况更新成功: ${completionId}`);
 
-    return {
-      success: true,
-      message: '完成情况更新成功',
-      data: {
-        completionId,
-      },
-    };
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '更新',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      oldValue: fields,
+      newValue: updateFields,
+    });
+
+    return { completionId };
   }
 
   /**
@@ -131,7 +163,7 @@ export class CompletionService {
     // 查询完成情况
     const completions = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[完成ID] = "${completionId}"`,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
     );
 
     if (completions.length === 0) {
@@ -163,9 +195,17 @@ export class CompletionService {
 
     this.logger.log(`完成情况提交成功: ${completionId}`);
 
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '提交',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      oldValue: fields,
+      newValue: { status: '已提交' },
+    });
+
     // 发送通知给主管
-    const userResult = await this.userService.getUserById(userId);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(userId);
     if (user.supervisorId) {
       const periodLabel = fields['周期名称'] || fields['周期ID'] || '未指定周期';
       await this.messageService.sendScoreNotification(
@@ -176,12 +216,8 @@ export class CompletionService {
     }
 
     return {
-      success: true,
-      message: '完成情况提交成功，等待评分',
-      data: {
-        completionId,
-        status: '已提交',
-      },
+      completionId,
+      status: '已提交',
     };
   }
 
@@ -197,7 +233,7 @@ export class CompletionService {
     // 查询完成情况
     const completions = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[完成ID] = "${completionId}"`,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
     );
 
     if (completions.length === 0) {
@@ -208,8 +244,7 @@ export class CompletionService {
     const fields = completion.fields || {};
 
     // 获取员工的主管ID
-    const userResult = await this.userService.getUserById(fields['用户ID']);
-    const user = userResult.data;
+    const user = await this.userService.getUserById(fields['用户ID']);
 
     // 检查权限
     if (user.supervisorId !== supervisorId) {
@@ -221,12 +256,14 @@ export class CompletionService {
     }
 
     // 更新评分
+    const calibrationScore = data.calibrationScore ?? data.supervisorScore;
+
     await this.bitableService.updateRecord(
       this.tableId,
       completion.record_id,
       {
         '主管评分': data.supervisorScore,
-        '校准分': data.calibrationScore || data.supervisorScore,
+        '校准分': calibrationScore,
         '主管评语': data.supervisorComment || '',
         '状态': '已评分',
         '评分时间': new Date().toISOString(),
@@ -236,9 +273,23 @@ export class CompletionService {
 
     this.logger.log(`评分完成: ${completionId}`);
 
+    await this.operationLogService.logOperation({
+      userId: supervisorId,
+      operationType: '评分',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      oldValue: fields,
+      newValue: {
+        supervisorScore: data.supervisorScore,
+        calibrationScore,
+        supervisorComment: data.supervisorComment || '',
+        status: '已评分',
+      },
+    });
+
     // 通知员工评分完成
     const periodLabel = fields['周期名称'] || fields['周期ID'] || '未指定周期';
-    const finalScore = data.calibrationScore || data.supervisorScore;
+    const finalScore = calibrationScore;
     await this.messageService.sendScoreCompletedNotification(
       fields['用户ID'],
       periodLabel,
@@ -246,12 +297,8 @@ export class CompletionService {
     );
 
     return {
-      success: true,
-      message: '评分成功',
-      data: {
-        completionId,
-        status: '已评分',
-      },
+      completionId,
+      status: '已评分',
     };
   }
 
@@ -259,13 +306,13 @@ export class CompletionService {
    * 归档完成情况
    * @param completionId 完成ID
    */
-  async archiveCompletion(completionId: string) {
+  async archiveCompletion(completionId: string, actorId: string) {
     this.logger.log(`归档完成情况: completionId=${completionId}`);
 
     // 查询完成情况
     const completions = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[完成ID] = "${completionId}"`,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
     );
 
     if (completions.length === 0) {
@@ -291,14 +338,58 @@ export class CompletionService {
 
     this.logger.log(`完成情况已归档: ${completionId}`);
 
+    await this.operationLogService.logOperation({
+      userId: actorId,
+      operationType: '归档',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      oldValue: fields,
+      newValue: { status: '已归档' },
+    });
+
     return {
-      success: true,
-      message: '完成情况已归档',
-      data: {
-        completionId,
-        status: '已归档',
-      },
+      completionId,
+      status: '已归档',
     };
+  }
+
+  /**
+   * 删除完成情况（仅草稿）
+   */
+  async deleteCompletion(userId: string, completionId: string) {
+    this.logger.log(`删除完成情况: completionId=${completionId}`);
+
+    const completions = await this.bitableService.findRecords(
+      this.tableId,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
+    );
+
+    if (completions.length === 0) {
+      throw new NotFoundException('完成情况不存在');
+    }
+
+    const completion = completions[0];
+    const fields = completion.fields || {};
+
+    if (fields['用户ID'] !== userId) {
+      throw new ForbiddenException('无权删除此完成情况');
+    }
+
+    if (fields['状态'] !== '草稿') {
+      throw new ForbiddenException('只能删除草稿状态的完成情况');
+    }
+
+    await this.bitableService.deleteRecord(this.tableId, completion.record_id);
+
+    await this.operationLogService.logOperation({
+      userId,
+      operationType: '删除',
+      resourceType: '完成情况',
+      resourceId: completionId,
+      oldValue: fields,
+    });
+
+    return { completionId };
   }
 
   /**
@@ -306,24 +397,28 @@ export class CompletionService {
    * @param userId 用户ID
    * @param status 状态筛选
    */
-  async getUserCompletions(userId: string, status?: string) {
+  async getUserCompletions(userId: string, query: QueryCompletionsDto = {}) {
+    const { status, periodId, page = 1, pageSize = 50 } = query;
     this.logger.log(`获取用户完成情况列表: userId=${userId}, status=${status}`);
 
-    let filter = `CurrentValue.[用户ID] = "${userId}"`;
-    if (status) {
-      filter += ` AND CurrentValue.[状态] = "${status}"`;
-    }
+    const filters: string[] = [`CurrentValue.[用户ID] = "${this.escapeFilterValue(userId)}"`];
+    if (status) filters.push(`CurrentValue.[状态] = "${this.escapeFilterValue(status)}"`);
+    if (periodId) filters.push(`CurrentValue.[周期ID] = "${this.escapeFilterValue(periodId)}"`);
 
+    const filter = filters.join(' AND ');
     const completions = await this.bitableService.findRecords(this.tableId, filter);
 
     const list = completions.map((record) => this.formatCompletion(record));
+    const total = list.length;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paged = list.slice(startIndex, endIndex);
 
     return {
-      success: true,
-      data: {
-        total: list.length,
-        list,
-      },
+      total,
+      page,
+      pageSize,
+      list: paged,
     };
   }
 
@@ -335,16 +430,13 @@ export class CompletionService {
     this.logger.log(`获取待评分完成情况: supervisorId=${supervisorId}`);
 
     const subordinatesResult = await this.userService.getSubordinates(supervisorId);
-    const subordinates = subordinatesResult.data.list || [];
+    const subordinates = subordinatesResult.list || [];
     const subordinateIds = new Set(subordinates.map((item: any) => item.userId));
 
     if (subordinateIds.size === 0) {
       return {
-        success: true,
-        data: {
-          total: 0,
-          list: [],
-        },
+        total: 0,
+        list: [],
       };
     }
 
@@ -358,11 +450,8 @@ export class CompletionService {
       .map((record) => this.formatCompletion(record));
 
     return {
-      success: true,
-      data: {
-        total: list.length,
-        list,
-      },
+      total: list.length,
+      list,
     };
   }
 
@@ -375,7 +464,7 @@ export class CompletionService {
 
     const completions = await this.bitableService.findRecords(
       this.tableId,
-      `CurrentValue.[完成ID] = "${completionId}"`,
+      `CurrentValue.[完成ID] = "${this.escapeFilterValue(completionId)}"`,
     );
 
     if (completions.length === 0) {
@@ -384,10 +473,7 @@ export class CompletionService {
 
     const completion = this.formatCompletion(completions[0]);
 
-    return {
-      success: true,
-      data: completion,
-    };
+    return completion;
   }
 
   /**
@@ -418,5 +504,9 @@ export class CompletionService {
       createdAt: fields['创建时间'] || '',
       updatedAt: fields['更新时间'] || '',
     };
+  }
+
+  private escapeFilterValue(value: string) {
+    return value.replace(/"/g, '\\"');
   }
 }
