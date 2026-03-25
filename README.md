@@ -10,8 +10,9 @@
 - 统一的 API 响应格式与错误处理
 
 ## 技术栈
-- 后端：NestJS + TypeScript + 飞书 SDK
+- 后端：NestJS + TypeScript + 飞书 SDK（@larksuiteoapi/node-sdk）
 - 前端：React 18 + Ant Design + Redux Toolkit + Vite
+- 缓存：Redis
 - 数据：飞书多维表格（Bitable）
 
 ## 项目结构
@@ -20,6 +21,7 @@ performance-system/
 ├── backend/            # 后端 NestJS
 ├── frontend/           # 前端 React
 ├── docs/               # 文档（API/部署/测试/运维）
+├── nginx.conf          # 前端 Nginx 反向代理配置
 ├── docker-compose.yml  # 本地容器编排
 └── README.md
 ```
@@ -27,6 +29,7 @@ performance-system/
 ## 环境要求
 - Node.js >= 18
 - npm >= 9
+- Redis >= 7（Docker 方式运行则无需单独安装）
 - 飞书企业账号
 
 ## 飞书开放平台配置
@@ -47,15 +50,34 @@ performance-system/
 
 ## 环境变量（后端）
 复制 `backend/.env.example` 到 `backend/.env` 并填写：
+
+**飞书应用配置：**
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 - `FEISHU_REDIRECT_URI`
+- `FEISHU_OAUTH_SCOPE`
+
+**多维表格配置：**
 - `BITABLE_APP_TOKEN`
 - `BITABLE_TABLE_EMPLOYEES`
 - `BITABLE_TABLE_OBJECTIVES`
 - `BITABLE_TABLE_COMPLETIONS`
+- `BITABLE_TABLE_APPROVALS`
+- `BITABLE_TABLE_CONFIG`
+
+**Redis 配置：**
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_PASSWORD`
+- `REDIS_DB`
+
+**其他：**
 - `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `PORT`
+- `NODE_ENV`
 - `FRONTEND_URL`
+- `CORS_ORIGIN`
 
 ## 本地运行
 ### 后端
@@ -82,6 +104,7 @@ docker compose up --build
 ```
 - 前端：`http://localhost:3000`
 - 后端：`http://localhost:3001/api`
+- Redis：`localhost:6379`
 
 ## 文档索引
 - `docs/API.md` API 文档
