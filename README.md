@@ -1,123 +1,167 @@
 # 飞书绩效考核系统
 
-基于飞书开放平台 + 多维表格（Bitable）的绩效考核系统，提供完整的目标管理、审批、完成情况与评分流程，支持管理员统计与导出。
+基于飞书开放平台、多维表格（Bitable）和 Redis 的绩效考核系统。系统覆盖目标管理、审批、完成情况填报、评分、归档、管理员统计和操作日志，前端提供管理后台，后端提供统一 API。
 
-## 主要功能
-- 飞书 OAuth 登录 + JWT 认证
-- 目标创建 / 提交 / 审批
-- 完成情况填写 / 提交 / 评分 / 归档
-- 管理员统计、导出与操作日志
-- 统一的 API 响应格式与错误处理
+## 功能特性
+
+- 飞书 OAuth 登录和 JWT 认证
+- 员工目标创建、提交、审批和状态流转
+- 完成情况填报、提交、评分和归档
+- 管理员数据统计、导出和操作日志
+- 飞书多维表格作为业务数据存储
+- 统一 API 响应格式、异常过滤和请求日志
+- Docker Compose 本地编排，包含前端、后端和 Redis
 
 ## 技术栈
-- 后端：NestJS + TypeScript + 飞书 SDK（@larksuiteoapi/node-sdk）
-- 前端：React 18 + Ant Design + Redux Toolkit + Vite
-- 缓存：Redis
-- 数据：飞书多维表格（Bitable）
+
+- 后端：NestJS、TypeScript、`@larksuiteoapi/node-sdk`
+- 前端：React 18、Ant Design、Redux Toolkit、Vite、TypeScript
+- 数据与缓存：飞书多维表格（Bitable）、Redis
+- 部署辅助：Docker、Docker Compose、Nginx
 
 ## 项目结构
-```
-performance-system/
-├── backend/            # 后端 NestJS
-├── frontend/           # 前端 React
-├── docs/               # 文档（API/部署/测试/运维）
-├── nginx.conf          # 前端 Nginx 反向代理配置
-├── docker-compose.yml  # 本地容器编排
+
+```text
+.
+├── backend/             # NestJS API 服务
+│   ├── src/modules/     # auth、user、objective、completion、admin、feishu 等模块
+│   ├── scripts/         # 多维表格初始化和测试用户脚本
+│   └── .env.example     # 后端环境变量模板
+├── frontend/            # React 管理后台
+│   └── src/             # 页面、API client、状态管理和布局组件
+├── docs/                # API、部署、测试、运维和表结构文档
+├── docker-compose.yml   # 本地容器编排
+├── nginx.conf           # 前端 Nginx 反向代理配置
 └── README.md
 ```
 
 ## 环境要求
-- Node.js >= 18
-- npm >= 9
-- Redis >= 7（Docker 方式运行则无需单独安装）
-- 飞书企业账号
+
+- Node.js 18+
+- npm 9+
+- Redis 7+（使用 Docker Compose 时会自动启动）
+- 飞书企业账号和企业自建应用
+- 一个用于保存绩效数据的飞书多维表格
 
 ## 飞书开放平台配置
-1. 创建企业自建应用
-2. 申请权限（至少）：
-   - `contact:user.base` 或 `contact:user.base:readonly`
-   - `bitable:app`
-   - `im:message`
-3. 安全设置 → 重定向 URL
-   - 开发环境：`http://localhost:3001/api/auth/callback`
-   - 生产环境：`https://your-domain.com/api/auth/callback`
 
-## 多维表格
-本项目使用**中文字段**。表结构参考：
-- `docs/BITABLE_SCHEMA.md`
+1. 创建企业自建应用。
+2. 申请并发布所需权限，至少包含用户基础信息、多维表格和消息相关权限。
+3. 在安全设置中配置 OAuth 重定向地址：
+   - 本地开发：`http://localhost:3001/api/auth/callback`
+   - 生产环境：使用实际域名下的 `/api/auth/callback`
+4. 按 `docs/BITABLE_SCHEMA.md` 创建或初始化多维表格。
 
-建议使用 `backend/scripts/` 中脚本初始化表结构。
+## 配置
 
-## 环境变量（后端）
-复制 `backend/.env.example` 到 `backend/.env` 并填写：
+复制后端环境变量模板并填写实际值：
 
-**飞书应用配置：**
-- `FEISHU_APP_ID`
-- `FEISHU_APP_SECRET`
-- `FEISHU_REDIRECT_URI`
-- `FEISHU_OAUTH_SCOPE`
+```bash
+cd backend
+cp .env.example .env
+```
 
-**多维表格配置：**
-- `BITABLE_APP_TOKEN`
-- `BITABLE_TABLE_EMPLOYEES`
-- `BITABLE_TABLE_OBJECTIVES`
-- `BITABLE_TABLE_COMPLETIONS`
-- `BITABLE_TABLE_APPROVALS`
-- `BITABLE_TABLE_CONFIG`
+主要变量：
 
-**Redis 配置：**
-- `REDIS_HOST`
-- `REDIS_PORT`
-- `REDIS_PASSWORD`
-- `REDIS_DB`
-
-**其他：**
-- `JWT_SECRET`
-- `JWT_EXPIRES_IN`
-- `PORT`
-- `NODE_ENV`
-- `FRONTEND_URL`
-- `CORS_ORIGIN`
+| 变量 | 用途 |
+| --- | --- |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书应用凭证 |
+| `FEISHU_REDIRECT_URI` / `FEISHU_OAUTH_SCOPE` | OAuth 回调和授权范围 |
+| `BITABLE_APP_TOKEN` | 飞书多维表格 App Token |
+| `BITABLE_TABLE_EMPLOYEES` | 员工表 ID |
+| `BITABLE_TABLE_OBJECTIVES` | 目标表 ID |
+| `BITABLE_TABLE_COMPLETIONS` | 完成情况表 ID |
+| `BITABLE_TABLE_APPROVALS` | 审批表 ID |
+| `BITABLE_TABLE_CONFIG` | 配置表 ID |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` / `REDIS_DB` | Redis 连接配置 |
+| `JWT_SECRET` / `JWT_EXPIRES_IN` | JWT 签名和有效期 |
+| `FRONTEND_URL` / `CORS_ORIGIN` | 前端地址和跨域配置 |
 
 ## 本地运行
+
 ### 后端
+
 ```bash
 cd backend
 npm install
-npm run build
-node dist/main.js
+npm run start:dev
 ```
-服务地址：`http://localhost:3001/api`
-开发环境 Swagger：`http://localhost:3001/api/docs`
+
+默认 API 地址：`http://localhost:3001/api`
+
+开发环境 Swagger 文档：`http://localhost:3001/api/docs`
 
 ### 前端
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-访问：`http://localhost:3000`
 
-## Docker Compose
+默认前端地址：`http://localhost:3000`
+
+### Docker Compose
+
 ```bash
 docker compose up --build
 ```
+
+默认服务：
+
 - 前端：`http://localhost:3000`
 - 后端：`http://localhost:3001/api`
 - Redis：`localhost:6379`
 
+## 常用命令
+
+后端：
+
+```bash
+npm run build
+npm run start:prod
+npm test
+npm run test:cov
+npm run lint
+npm run setup:bitable
+npm run add:testuser
+```
+
+前端：
+
+```bash
+npm run dev
+npm run build
+npm run preview
+```
+
 ## 文档索引
-- `docs/API.md` API 文档
-- `docs/DEPLOYMENT.md` 部署指南
-- `docs/TEST_CASES.md` 测试用例
-- `docs/OPS.md` 运维监控建议
+
+- [docs/API.md](./docs/API.md)：API 文档
+- [docs/BITABLE_SCHEMA.md](./docs/BITABLE_SCHEMA.md)：多维表格结构
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)：部署说明
+- [docs/TEST_CASES.md](./docs/TEST_CASES.md)：测试用例
+- [docs/OPS.md](./docs/OPS.md)：运维监控建议
+- [QUICKSTART.md](./QUICKSTART.md)：快速启动说明
+- [SETUP.md](./SETUP.md)：配置说明
 
 ## 常见问题
-**OAuth 登录失败 / invalid access token**
-- 确保 `FEISHU_APP_ID/SECRET` 正确且对应同一应用
-- 确保应用已发布到企业
-- 权限范围与 `FEISHU_OAUTH_SCOPE` 一致
-- 重定向地址与平台配置精确匹配
 
----
-如需扩展功能（考核周期、配置中心、审批流程升级），建议先在测试企业验证。
+### OAuth 登录失败
+
+- 确认 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET` 来自同一个飞书应用。
+- 确认应用已发布到企业。
+- 确认开放平台中的重定向地址与 `FEISHU_REDIRECT_URI` 完全一致。
+- 确认授权范围与 `FEISHU_OAUTH_SCOPE` 和已申请权限一致。
+
+### 多维表格读写失败
+
+- 检查 `BITABLE_APP_TOKEN` 和各表 ID 是否来自同一个多维表格。
+- 检查飞书应用是否具备多维表格访问权限。
+- 对照 `docs/BITABLE_SCHEMA.md` 确认字段名称和类型。
+
+## 注意事项
+
+- 本项目使用中文字段名和中文业务状态，请谨慎修改多维表格字段。
+- 生产环境必须替换默认 `JWT_SECRET`，并使用 HTTPS 回调地址。
+- 初始化或修复多维表格前，建议先在测试企业和测试表中验证脚本。
