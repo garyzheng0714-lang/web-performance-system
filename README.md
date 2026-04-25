@@ -1,6 +1,18 @@
-# 飞书绩效考核系统
+# web-performance-system
 
-基于飞书开放平台、多维表格（Bitable）和 Redis 的绩效考核系统。系统覆盖目标管理、审批、完成情况填报、评分、归档、管理员统计和操作日志，前端提供管理后台，后端提供统一 API。
+![分类](https://img.shields.io/badge/%E5%88%86%E7%B1%BB-%E9%A3%9E%E4%B9%A6%E5%BA%94%E7%94%A8-2563eb?style=flat-square)
+![技术栈](https://img.shields.io/badge/%E6%8A%80%E6%9C%AF%E6%A0%88-NestJS%20React-0f766e?style=flat-square)
+![状态](https://img.shields.io/badge/%E7%8A%B6%E6%80%81-%E4%B8%9A%E5%8A%A1%E7%B3%BB%E7%BB%9F-16a34a?style=flat-square)
+![README](https://img.shields.io/badge/README-%E4%B8%AD%E6%96%87-brightgreen?style=flat-square)
+
+飞书应用：基于飞书开放平台、多维表格和 Redis 的绩效考核系统，覆盖目标、审批、填报、评分与管理统计。
+
+## 仓库定位
+
+- 分类：飞书业务应用 / 绩效考核系统。
+- 面向对象：需要用飞书账号登录、用飞书多维表格承载绩效数据，并提供 Web 管理后台的组织或团队。
+- 主要边界：前端提供管理后台，后端提供统一 API；业务数据依赖飞书多维表格，缓存与会话相关能力依赖 Redis。
+- 与表格工具仓库的区别：本仓库是完整业务系统，不是单个多维表格插件、字段捷径或通用表格转换工具。
 
 ## 功能特性
 
